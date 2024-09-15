@@ -1,10 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using BackEnd.Entities;
 using Microsoft.Azure.Cosmos;
+using System;
+using System.Resources;
+using System.Threading.Tasks;
+using User = BackEnd.Entities.User;
 using System.Collections;
 using System.Reflection;
-using System.Resources;
-using User = BackEnd.Entities.User;
 
 namespace BackEnd.Controllers
 {
@@ -14,6 +16,9 @@ namespace BackEnd.Controllers
     {
         private readonly CosmosDbContext _dbContext;
         private static readonly Random _random = new Random();
+
+        // Base URL for the profile pictures served via CDN
+        private static readonly string _cdnBaseUrl = "https://tenx-ghg3hcg0bphxd3b9.z02.azurefd.net/profilepic/";
 
         public UsersController(CosmosDbContext dbContext)
         {
@@ -26,15 +31,23 @@ namespace BackEnd.Controllers
         {
             try
             {
+                // Generate a random username and profile picture URL
                 var newUser = new User
                 {
-                    Username = GenerateRandomName()
+                    Username = GenerateRandomName(),
+                    ProfilePicUrl = GetRandomProfilePic()
                 };
 
                 // Ensure PartitionKey is provided and valid (could be UserId or Id)
                 await _dbContext.UsersContainer.CreateItemAsync(newUser);
 
-                return Ok(new { userId = newUser.Id, username = newUser.Username });
+                // Return the user details including the profile picture
+                return Ok(new
+                {
+                    userId = newUser.Id,
+                    username = newUser.Username,
+                    profilePic = newUser.ProfilePicUrl
+                });
             }
             catch (CosmosException ex)
             {
@@ -60,6 +73,13 @@ namespace BackEnd.Controllers
             return $"{finalAdjective}_{finalNoun}";
         }
 
+        // Returns a random profile picture URL from the range pp1 to pp25
+        private string GetRandomProfilePic()
+        {
+            int randomNumber = _random.Next(1, 26); // Generate a random number between 1 and 25
+            return $"{_cdnBaseUrl}pp{randomNumber}.jpg";
+        }
+
         // Get a random resource entry (adjective or noun) from the resx file
         private string GetRandomResource(string resourceType)
         {
@@ -71,7 +91,7 @@ namespace BackEnd.Controllers
                 throw new Exception("ResourceSet is null. Resource file might not be found.");
             }
 
-            ArrayList matchingEntries = new ArrayList();
+            var matchingEntries = new List<DictionaryEntry>();
             foreach (DictionaryEntry entry in resourceSet)
             {
                 if (entry.Key.ToString().StartsWith(resourceType))
@@ -86,7 +106,7 @@ namespace BackEnd.Controllers
             }
 
             // Select a random entry
-            DictionaryEntry selectedEntry = (DictionaryEntry)matchingEntries[_random.Next(matchingEntries.Count)];
+            DictionaryEntry selectedEntry = matchingEntries[_random.Next(matchingEntries.Count)];
 
             // Safeguard against unboxing null values (CS8605 fix)
             if (selectedEntry.Value != null && selectedEntry.Key != null)
@@ -100,15 +120,15 @@ namespace BackEnd.Controllers
         // Extract the French part from the name (e.g., "Adj_Aventureux-Adventurous")
         private string GetFrenchPart(string entry)
         {
-            var parts = entry?.Split('-'); // CS8602 fix for null reference
-            return parts?[0].Split('_')[1]; // Ensure null check before dereference
+            var parts = entry?.Split('-');
+            return parts?[0].Split('_')[1];
         }
 
         // Extract the English part from the value (e.g., "Adj_Aventureux-Adventurous")
         private string GetEnglishPart(string entry)
         {
-            var parts = entry?.Split('-'); // CS8602 fix for null reference
-            return parts?[1]; // Ensure null check before dereference
+            var parts = entry?.Split('-');
+            return parts?[1];
         }
     }
 }

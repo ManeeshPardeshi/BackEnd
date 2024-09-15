@@ -9,5 +9,6 @@ namespace BackEnd.Entities
 
         [JsonProperty(PropertyName = "username")]
         public string Username { get; set; } = "Anonymous"; // Default value
+        public string ProfilePicUrl { get; internal set; }
     }
 }
