@@ -1,6 +1,8 @@
-﻿using Microsoft.Azure.Cosmos;
+﻿using Azure.Storage.Blobs;
 using Azure.Identity;
+using Azure.Messaging.ServiceBus;
 using BackEnd.Entities;
+using Microsoft.Azure.Cosmos;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,24 +24,29 @@ namespace BackEnd
         {
             try
             {
-                // Azure Key Vault Integration
                 var keyVaultEndpoint = new Uri("https://tenx.vault.azure.net/");
 
-                // Create a local variable for updated configuration
+                // Fetching secrets from Azure Key Vault
                 var updatedConfiguration = new ConfigurationBuilder()
                     .AddConfiguration(_configuration)
-                    .AddAzureKeyVault(keyVaultEndpoint, new DefaultAzureCredential())
+                    .AddAzureKeyVault(keyVaultEndpoint, new DefaultAzureCredential()) // Use DefaultAzureCredential for managed identity
                     .Build();
 
-                // Retrieve CosmosDB connection string from the updated configuration
+                // Retrieve secrets from Key Vault
                 var cosmosDbConnectionString = updatedConfiguration["CosmosDbConnectionString"];
+                var blobConnectionString = updatedConfiguration["BlobConnectionString"];
+                var serviceBusConnectionString = updatedConfiguration["ServiceBusConnectionString"]; // New service bus connection string
 
                 if (string.IsNullOrEmpty(cosmosDbConnectionString))
-                {
                     throw new Exception("CosmosDB connection string is missing or invalid.");
-                }
 
-                // Configure CosmosDB client with connection pooling optimization
+                if (string.IsNullOrEmpty(blobConnectionString))
+                    throw new Exception("Blob connection string is missing or invalid.");
+
+                if (string.IsNullOrEmpty(serviceBusConnectionString))
+                    throw new Exception("Service Bus connection string is missing or invalid.");
+
+                // Configure CosmosDB client
                 CosmosClientOptions clientOptions = new CosmosClientOptions
                 {
                     ConnectionMode = ConnectionMode.Direct,   // Direct connection mode for better performance
@@ -48,14 +55,18 @@ namespace BackEnd
                 };
 
                 CosmosClient cosmosClient = new CosmosClient(cosmosDbConnectionString, clientOptions);
-
-                // Register CosmosClient as Singleton
                 services.AddSingleton(cosmosClient);
 
-                // Register the custom CosmosDbContext
+                // Register CosmosDbContext
                 services.AddScoped<CosmosDbContext>();
 
-                // Add Controller services
+                // Register BlobServiceClient for handling Blob Storage
+                services.AddSingleton(x => new BlobServiceClient(blobConnectionString));
+
+                // Register ServiceBusClient for Azure Service Bus
+                services.AddSingleton(x => new ServiceBusClient(serviceBusConnectionString));
+
+                // Add Controllers
                 services.AddControllers();
 
                 // Add Swagger for API documentation
@@ -63,7 +74,7 @@ namespace BackEnd
             }
             catch (Exception ex)
             {
-                // Log any errors that occur during service configuration
+                // Log any errors during service configuration
                 Console.WriteLine($"Error in ConfigureServices: {ex.Message}");
                 throw;
             }
@@ -92,7 +103,7 @@ namespace BackEnd
             }
             catch (Exception ex)
             {
-                // Log any errors during the app configuration
+                // Log any errors during app configuration
                 Console.WriteLine($"Error in Configure: {ex.Message}");
                 throw;
             }
