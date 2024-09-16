@@ -1,13 +1,26 @@
-﻿namespace BackEnd.Models
+﻿using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Http;
+
+namespace BackEnd.Models
 {
     public class FeedUploadModel
     {
-        public string UserId { get; set; }
-        public string Description { get; set; }
-        public string FileName { get; set; }
-        public string ContentType { get; set; }
-        public long FileSize { get; set; } // File size to ensure it’s under 0.5 GB
+        [JsonPropertyName("userId")]
+        public string UserId { get; set; } = string.Empty;
 
-        public IFormFile File { get; set; }
+        [JsonPropertyName("description")]
+        public string Description { get; set; } = string.Empty;
+
+        [JsonPropertyName("fileName")]
+        public string FileName { get; set; } = string.Empty;
+
+        [JsonPropertyName("contentType")]
+        public string ContentType { get; set; } = string.Empty;
+
+        [JsonPropertyName("fileSize")]
+        public long FileSize { get; set; }
+
+        [JsonPropertyName("file")]
+        public IFormFile File { get; set; } = null!;  // Use IFormFile to handle file upload
     }
 }

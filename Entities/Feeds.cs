@@ -1,23 +1,28 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System.Text.Json.Serialization;
 
 namespace BackEnd.Entities
 {
     public class Feed
     {
-        [JsonProperty(PropertyName = "id")]
-        public string Id { get; set; }
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = Guid.NewGuid().ToString();
 
-        [JsonProperty(PropertyName = "userId")]
-        public string UserId { get; set; }
+        [JsonPropertyName("userId")]
+        public string UserId { get; set; } = string.Empty;
 
-        [JsonProperty(PropertyName = "feedUrl")]
-        public string FeedUrl { get; set; }
+        [JsonPropertyName("feedUrl")]
+        public string FeedUrl { get; set; } = string.Empty;
 
-        [JsonProperty(PropertyName = "description")]
-        public string Description { get; set; }
+        [JsonPropertyName("description")]
+        public string Description { get; set; } = string.Empty;
 
-        [JsonProperty(PropertyName = "uploadDate")]
+        [JsonPropertyName("contentType")]
+        public string ContentType { get; set; } = string.Empty;
+
+        [JsonPropertyName("fileSize")]
+        public long FileSize { get; set; }
+
+        [JsonPropertyName("uploadDate")]
         public DateTime UploadDate { get; set; }
     }
 }

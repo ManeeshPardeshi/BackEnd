@@ -11,7 +11,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos.Linq;
 
-
 namespace BackEnd.Controllers
 {
     [ApiController]
@@ -64,40 +63,45 @@ namespace BackEnd.Controllers
         }
 
         /// <summary>
-        /// Upload a New Feed (File Upload to Blob + Metadata to Cosmos DB)
+        /// Upload a new feed with file
         /// </summary>
         [HttpPost("uploadFeed")]
         public async Task<IActionResult> UploadFeed([FromForm] FeedUploadModel model)
         {
+            if (model.File == null || model.File.Length == 0)
+            {
+                return BadRequest("File is required.");
+            }
+
             try
             {
-                // Upload feed to Blob Storage
-                var blobContainerClient = _blobServiceClient.GetBlobContainerClient(_feedContainer);
-                var blobClient = blobContainerClient.GetBlobClient(model.File.FileName);
+                // Upload the file to Blob Storage
+                var containerClient = _blobServiceClient.GetBlobContainerClient(_feedContainer);
+                var blobClient = containerClient.GetBlobClient(model.File.FileName);
 
                 using (var stream = model.File.OpenReadStream())
                 {
-                    await blobClient.UploadAsync(stream, true);
+                    await blobClient.UploadAsync(stream);
                 }
 
-                // Create feed metadata object
+                // Save feed details to Cosmos DB
                 var feed = new Feed
                 {
-                    Id = Guid.NewGuid().ToString(),
                     UserId = model.UserId,
+                    Description = model.Description,
                     FeedUrl = blobClient.Uri.ToString(),
-                    UploadDate = DateTime.UtcNow,
-                    Description = model.Description
+                    ContentType = model.ContentType,
+                    FileSize = model.File.Length,
+                    UploadDate = DateTime.UtcNow
                 };
 
-                // Store feed metadata in Cosmos DB
-                await _dbContext.FeedsContainer.CreateItemAsync(feed);
+                await _dbContext.FeedsContainer.CreateItemAsync(feed, new PartitionKey(feed.UserId));
 
-                // Notify users via Azure Service Bus
-                var notificationMessage = new ServiceBusMessage($"New feed uploaded by {model.UserId}");
-                await _serviceBusSender.SendMessageAsync(notificationMessage);
+                // Send a notification to Azure Service Bus
+                var message = new ServiceBusMessage($"New feed uploaded by User: {model.UserId}");
+                await _serviceBusSender.SendMessageAsync(message);
 
-                return Ok(feed);
+                return Ok(new { Message = "Feed uploaded successfully.", FeedUrl = feed.FeedUrl });
             }
             catch (Exception ex)
             {
