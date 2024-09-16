@@ -1,9 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using BackEnd.Entities;
 using Microsoft.Azure.Cosmos;
-using System;
 using System.Resources;
-using System.Threading.Tasks;
 using User = BackEnd.Entities.User;
 using System.Collections;
 using System.Reflection;

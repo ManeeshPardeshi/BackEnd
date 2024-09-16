@@ -4,11 +4,6 @@ using BackEnd.Entities;
 using BackEnd.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Cosmos;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos.Linq;
 
 namespace BackEnd.Controllers
@@ -20,46 +15,13 @@ namespace BackEnd.Controllers
         private readonly CosmosDbContext _dbContext;
         private readonly BlobServiceClient _blobServiceClient;
         private readonly ServiceBusSender _serviceBusSender;
-        private readonly string _feedContainer = "feedscontainer";  // Blob container for storing feeds
+        private readonly string _feedContainer = "media";  // Correct Blob container name
 
         public FeedsController(CosmosDbContext dbContext, BlobServiceClient blobServiceClient, ServiceBusClient serviceBusClient)
         {
             _dbContext = dbContext;
             _blobServiceClient = blobServiceClient;
             _serviceBusSender = serviceBusClient.CreateSender("new-feed-notifications");
-        }
-
-        /// <summary>
-        /// Get Feeds By User ID (with Pagination)
-        /// </summary>
-        [HttpGet("getUserFeeds")]
-        public async Task<IActionResult> GetUserFeeds(string userId, int pageNumber = 1, int pageSize = 10)
-        {
-            try
-            {
-                var queryOptions = new QueryRequestOptions { MaxItemCount = pageSize };
-                var query = _dbContext.FeedsContainer
-                    .GetItemLinqQueryable<Feed>(requestOptions: queryOptions)
-                    .Where(feed => feed.UserId == userId)
-                    .OrderByDescending(feed => feed.UploadDate)
-                    .Skip((pageNumber - 1) * pageSize)
-                    .Take(pageSize);
-
-                var iterator = query.ToFeedIterator();
-                var feeds = new List<Feed>();
-
-                while (iterator.HasMoreResults)
-                {
-                    var response = await iterator.ReadNextAsync();
-                    feeds.AddRange(response);
-                }
-
-                return Ok(feeds);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"Error retrieving feeds: {ex.Message}");
-            }
         }
 
         /// <summary>
@@ -75,8 +37,13 @@ namespace BackEnd.Controllers
 
             try
             {
-                // Upload the file to Blob Storage
+                // Get Blob container reference, using the correct 'media' container
                 var containerClient = _blobServiceClient.GetBlobContainerClient(_feedContainer);
+
+                // Ensure the container exists
+                await containerClient.CreateIfNotExistsAsync();
+
+                // Upload the file to Blob Storage
                 var blobClient = containerClient.GetBlobClient(model.File.FileName);
 
                 using (var stream = model.File.OpenReadStream())
@@ -106,6 +73,39 @@ namespace BackEnd.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, $"Error uploading feed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Retrieve Feeds By User ID (with Pagination)
+        /// </summary>
+        [HttpGet("getUserFeeds")]
+        public async Task<IActionResult> GetUserFeeds(string userId, int pageNumber = 1, int pageSize = 10)
+        {
+            try
+            {
+                var queryOptions = new QueryRequestOptions { MaxItemCount = pageSize };
+                var query = _dbContext.FeedsContainer
+                    .GetItemLinqQueryable<Feed>(requestOptions: queryOptions)
+                    .Where(feed => feed.UserId == userId)
+                    .OrderByDescending(feed => feed.UploadDate)
+                    .Skip((pageNumber - 1) * pageSize)
+                    .Take(pageSize);
+
+                var iterator = query.ToFeedIterator();
+                var feeds = new List<Feed>();
+
+                while (iterator.HasMoreResults)
+                {
+                    var response = await iterator.ReadNextAsync();
+                    feeds.AddRange(response);
+                }
+
+                return Ok(feeds);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error retrieving feeds: {ex.Message}");
             }
         }
 
