@@ -37,14 +37,15 @@ namespace BackEnd.Controllers
 
             try
             {
-                // Get Blob container reference, using the correct 'media' container
+
+                // Generate a unique feed ID
+                var feedId = Guid.NewGuid().ToString();
+
+                // Get Blob container reference
                 var containerClient = _blobServiceClient.GetBlobContainerClient(_feedContainer);
 
-                // Ensure the container exists
-                await containerClient.CreateIfNotExistsAsync();
-
-                // Upload the file to Blob Storage
-                var blobClient = containerClient.GetBlobClient(model.File.FileName);
+                // Append the feedId to the Blob file name to ensure uniqueness
+                var blobClient = containerClient.GetBlobClient($"{feedId}_{model.File.FileName}");
 
                 using (var stream = model.File.OpenReadStream())
                 {
@@ -54,6 +55,7 @@ namespace BackEnd.Controllers
                 // Save feed details to Cosmos DB
                 var feed = new Feed
                 {
+                    Id = feedId,
                     UserId = model.UserId,
                     Description = model.Description,
                     FeedUrl = blobClient.Uri.ToString(),
