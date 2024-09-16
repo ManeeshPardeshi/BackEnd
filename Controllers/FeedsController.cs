@@ -62,7 +62,7 @@ namespace BackEnd.Controllers
                     UploadDate = DateTime.UtcNow
                 };
 
-                await _dbContext.FeedsContainer.CreateItemAsync(feed, new PartitionKey(feed.UserId));
+                await _dbContext.FeedsContainer.CreateItemAsync(feed);
 
                 // Send a notification to Azure Service Bus
                 var message = new ServiceBusMessage($"New feed uploaded by User: {model.UserId}");
