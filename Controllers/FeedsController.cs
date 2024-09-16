@@ -24,59 +24,53 @@ namespace BackEnd.Controllers
             _serviceBusSender = serviceBusClient.CreateSender("new-feed-notifications");
         }
 
-        /// <summary>
-        /// Upload a new feed with file
-        /// </summary>
         [HttpPost("uploadFeed")]
         public async Task<IActionResult> UploadFeed([FromForm] FeedUploadModel model)
         {
-            if (model.File == null || model.File.Length == 0)
-            {
-                return BadRequest("File is required.");
-            }
-
             try
             {
-
-                // Generate a unique feed ID
-                var feedId = Guid.NewGuid().ToString();
+                // Ensure the required properties are present
+                if (model.File == null || string.IsNullOrEmpty(model.UserId) || string.IsNullOrEmpty(model.FileName))
+                {
+                    return BadRequest("Missing required fields.");
+                }
 
                 // Get Blob container reference
-                var containerClient = _blobServiceClient.GetBlobContainerClient(_feedContainer);
+                var containerClient = _blobServiceClient.GetBlobContainerClient("media");
 
-                // Append the feedId to the Blob file name to ensure uniqueness
-                var blobClient = containerClient.GetBlobClient($"{feedId}_{model.File.FileName}");
+                // Generate a unique Blob name using Feed ID or other unique value
+                var blobName = $"{Guid.NewGuid()}-{model.File.FileName}";
+                var blobClient = containerClient.GetBlobClient(blobName);
 
+                // Upload the file to Blob Storage
                 using (var stream = model.File.OpenReadStream())
                 {
                     await blobClient.UploadAsync(stream);
                 }
 
-                // Save feed details to Cosmos DB
+                // Get the Blob URL
+                var blobUrl = blobClient.Uri.ToString();
+
+                // Save the feed data to Cosmos DB
                 var feed = new Feed
                 {
-                    Id = feedId,
+                    Id = Guid.NewGuid().ToString(),  // Generate unique ID for the feed
                     UserId = model.UserId,
                     Description = model.Description,
-                    FeedUrl = blobClient.Uri.ToString(),
-                    ContentType = model.ContentType,
-                    FileSize = model.File.Length,
+                    FeedUrl = blobUrl,  // Set the Blob URL
                     UploadDate = DateTime.UtcNow
                 };
 
-                await _dbContext.FeedsContainer.CreateItemAsync(feed);
+                await _dbContext.FeedsContainer.CreateItemAsync(feed, new PartitionKey(feed.UserId));
 
-                // Send a notification to Azure Service Bus
-                var message = new ServiceBusMessage($"New feed uploaded by User: {model.UserId}");
-                await _serviceBusSender.SendMessageAsync(message);
-
-                return Ok(new { Message = "Feed uploaded successfully.", FeedUrl = feed.FeedUrl });
+                return Ok("Feed uploaded successfully.");
             }
             catch (Exception ex)
             {
                 return StatusCode(500, $"Error uploading feed: {ex.Message}");
             }
         }
+
 
         /// <summary>
         /// Retrieve Feeds By User ID (with Pagination)
