@@ -19,6 +19,7 @@ jobs:
         node-version: '16.x'
 
     - name: Install dependencies and build
+      working-directory: ./Frontend  # Update this to the directory where package.json is located
       run: |
         npm install
         npm run build --prod
@@ -28,10 +29,4 @@ jobs:
       with:
         name: build
         path: |
-          ./dist
-
-    - name: Publish build artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: deployment-zip
-        path: ./dist
+          ./Frontend/dist  # Make sure this points to your built files
