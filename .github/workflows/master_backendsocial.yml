@@ -1,30 +1,37 @@
-trigger:
-- main
+name: API Gateway Deployment
 
-pool:
-  vmImage: 'ubuntu-latest'
+on:
+  push:
+    branches:
+      - master  # Trigger the workflow on push to the master branch
 
-steps:
-- task: NodeTool@0
-  inputs:
-    versionSpec: '16.x' # Use the version you're targeting
-  displayName: 'Install Node.js'
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-- script: |
-    npm install
-    npm run build --prod
-  displayName: 'Install dependencies and build'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-- task: ArchiveFiles@2
-  inputs:
-    rootFolderOrFile: '$(System.DefaultWorkingDirectory)/dist'
-    includeRootFolder: false
-    archiveType: 'zip'
-    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
-    replaceExistingArchive: true
+    - name: Install Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '16.x'
 
-- task: PublishBuildArtifacts@1
-  inputs:
-    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-    ArtifactName: 'drop'
-    publishLocation: 'Container'
+    - name: Install dependencies and build
+      run: |
+        npm install
+        npm run build --prod
+
+    - name: Archive build artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: build
+        path: |
+          ./dist
+
+    - name: Publish build artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: deployment-zip
+        path: ./dist
