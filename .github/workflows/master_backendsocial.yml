@@ -1,32 +1,53 @@
-name: API Gateway Deployment
+name: Build and deploy ASP.Net Core app to Azure Web App - backendsocial
 
 on:
   push:
     branches:
-      - master  # Trigger the workflow on push to the master branch
+      - master
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-    - name: Install Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '16.x'
+      - name: Set up .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
 
-    - name: Install dependencies and build
-      working-directory: ./Frontend  # Update this to the directory where package.json is located
-      run: |
-        npm install
-        npm run build --prod
+      - name: Build with dotnet
+        run: dotnet build --configuration Release
 
-    - name: Archive build artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: build
-        path: |
-          ./Frontend/dist  # Make sure this points to your built files
+      - name: dotnet publish
+        run: dotnet publish -c Release -o ${{env.DOTNET_ROOT}}/myapp
+
+      - name: Upload artifact for deployment job
+        uses: actions/upload-artifact@v4
+        with:
+          name: .net-app
+          path: ${{env.DOTNET_ROOT}}/myapp
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: 'Production'
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+    
+    steps:
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: .net-app
+      
+      - name: Deploy to Azure Web App
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'backendsocial'
+          slot-name: 'Production'
+          package: .
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_3D2F85DF144C40D3A553193FA6A7EF7F }}
