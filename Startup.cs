@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Ocelot.DependencyInjection;
+using Ocelot.Middleware;
 using System;
 
 namespace BackEnd
@@ -24,13 +26,14 @@ namespace BackEnd
         {
             try
             {
-                var keyVaultEndpoint = new Uri("https://tenx.vault.azure.net/");
-
+                // Configure Azure Key Vault integration
+                var keyVaultEndpoint = new Uri(_configuration["AzureKeyVault:VaultUri"]);
                 var updatedConfiguration = new ConfigurationBuilder()
                     .AddConfiguration(_configuration)
                     .AddAzureKeyVault(keyVaultEndpoint, new DefaultAzureCredential())
                     .Build();
 
+                // Fetching secrets from Azure Key Vault
                 var cosmosDbConnectionString = updatedConfiguration["CosmosDbConnectionString"];
                 var blobConnectionString = updatedConfiguration["BlobConnectionString"];
                 var serviceBusConnectionString = updatedConfiguration["ServiceBusConnectionString"];
@@ -42,20 +45,25 @@ namespace BackEnd
                     throw new Exception("Connection strings are missing.");
                 }
 
+                // Configure Cosmos DB
                 CosmosClientOptions clientOptions = new CosmosClientOptions
                 {
                     ConnectionMode = ConnectionMode.Direct,
                     MaxRequestsPerTcpConnection = 10,
                     MaxTcpConnectionsPerEndpoint = 10
                 };
-
                 CosmosClient cosmosClient = new CosmosClient(cosmosDbConnectionString, clientOptions);
                 services.AddSingleton(cosmosClient);
                 services.AddScoped<CosmosDbContext>();
 
+                // Configure Blob Storage and Service Bus
                 services.AddSingleton(x => new BlobServiceClient(blobConnectionString));
                 services.AddSingleton(x => new ServiceBusClient(serviceBusConnectionString));
 
+                // Add Ocelot for API Gateway
+                services.AddOcelot();
+
+                // Adding controllers and Swagger
                 services.AddControllers();
                 services.AddSwaggerGen();
             }
@@ -76,7 +84,12 @@ namespace BackEnd
             }
 
             app.UseHttpsRedirection();
+
             app.UseRouting();
+
+            // Add Ocelot middleware for API Gateway
+            app.UseOcelot().Wait();
+
             app.UseAuthorization();
 
             app.UseEndpoints(endpoints => endpoints.MapControllers());

@@ -15,7 +15,7 @@ namespace BackEnd.Controllers
         private readonly CosmosDbContext _dbContext;
         private readonly BlobServiceClient _blobServiceClient;
         private readonly ServiceBusSender _serviceBusSender;
-        private readonly string _feedContainer = "media";  // Correct Blob container name
+        private readonly string _feedContainer = "media";  // Blob container for storing feeds
 
         public FeedsController(CosmosDbContext dbContext, BlobServiceClient blobServiceClient, ServiceBusClient serviceBusClient)
         {
@@ -24,21 +24,24 @@ namespace BackEnd.Controllers
             _serviceBusSender = serviceBusClient.CreateSender("new-feed-notifications");
         }
 
+        /// <summary>
+        /// Upload a new feed with media.
+        /// </summary>
         [HttpPost("uploadFeed")]
         public async Task<IActionResult> UploadFeed([FromForm] FeedUploadModel model)
         {
             try
             {
-                // Ensure the required properties are present
+                // Ensure required fields are present
                 if (model.File == null || string.IsNullOrEmpty(model.UserId) || string.IsNullOrEmpty(model.FileName))
                 {
                     return BadRequest("Missing required fields.");
                 }
 
                 // Get Blob container reference
-                var containerClient = _blobServiceClient.GetBlobContainerClient("media");
+                var containerClient = _blobServiceClient.GetBlobContainerClient(_feedContainer);
 
-                // Generate a unique Blob name using Feed ID or other unique value
+                // Generate a unique Blob name using a unique value
                 var blobName = $"{Guid.NewGuid()}-{model.File.FileName}";
                 var blobClient = containerClient.GetBlobClient(blobName);
 
@@ -51,7 +54,7 @@ namespace BackEnd.Controllers
                 // Get the Blob URL
                 var blobUrl = blobClient.Uri.ToString();
 
-                // Save the feed data to Cosmos DB
+                // Save the feed data to CosmosDB
                 var feed = new Feed
                 {
                     Id = Guid.NewGuid().ToString(),  // Generate unique ID for the feed
@@ -63,7 +66,7 @@ namespace BackEnd.Controllers
 
                 await _dbContext.FeedsContainer.CreateItemAsync(feed, new PartitionKey(feed.UserId));
 
-                return Ok("Feed uploaded successfully.");
+                return Ok(new { Message = "Feed uploaded successfully.", FeedId = feed.Id });
             }
             catch (Exception ex)
             {
@@ -71,22 +74,27 @@ namespace BackEnd.Controllers
             }
         }
 
-
         /// <summary>
         /// Retrieve Feeds By User ID (with Pagination)
         /// </summary>
         [HttpGet("getUserFeeds")]
-        public async Task<IActionResult> GetUserFeeds(string userId, int pageNumber = 1, int pageSize = 10)
+        public async Task<IActionResult> GetUserFeeds(string userId = null, int pageNumber = 1, int pageSize = 10)
         {
             try
             {
                 var queryOptions = new QueryRequestOptions { MaxItemCount = pageSize };
+
                 var query = _dbContext.FeedsContainer
                     .GetItemLinqQueryable<Feed>(requestOptions: queryOptions)
-                    .Where(feed => feed.UserId == userId)
                     .OrderByDescending(feed => feed.UploadDate)
                     .Skip((pageNumber - 1) * pageSize)
                     .Take(pageSize);
+
+                // If userId is provided, filter feeds by UserId
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    query = query.Where(feed => feed.UserId == userId);
+                }
 
                 var iterator = query.ToFeedIterator();
                 var feeds = new List<Feed>();
@@ -102,27 +110,6 @@ namespace BackEnd.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, $"Error retrieving feeds: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Get Feed Details by Feed ID
-        /// </summary>
-        [HttpGet("getFeed/{feedId}")]
-        public async Task<IActionResult> GetFeedById(string feedId)
-        {
-            try
-            {
-                var feed = await _dbContext.FeedsContainer.ReadItemAsync<Feed>(feedId, new PartitionKey(feedId));
-                return Ok(feed);
-            }
-            catch (CosmosException ex)
-            {
-                return StatusCode(404, $"Feed not found: {ex.Message}");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"Error retrieving feed: {ex.Message}");
             }
         }
     }
